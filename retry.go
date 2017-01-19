@@ -4,9 +4,8 @@
 // 
 // Example:
 //     // Retry six times with a maximum backoff of 5 seconds
-//     // between the retry attempts. The maximum backoff is
-//     // reached within the third attempt, since retry uses
-//     // exponential backoff.
+//     // between the retry attempts.
+//     
 //     var err error
 //     retry.X(6, 5*time.Second, func() bool {
 //         err = DoSomething()
