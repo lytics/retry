@@ -14,6 +14,6 @@ retry.X(6, 5*time.Second, func() bool {
 if err != nil {
 	// The error is not nil, so all retries failed.
 } else {
-	// The error is nil, so one successed.
+	// The error is nil, so one succeeded.
 }
 ```
