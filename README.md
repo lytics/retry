@@ -1,5 +1,5 @@
 # retry
-[![GoDoc](http://godoc.org/badge.png)](http://godoc.org/github.com/lytics/retry)
+[![GoDoc](https://godoc.org/github.com/lytics/retry?status.svg)](https://godoc.org/github.com/lytics/retry)
 
 Retry Library for Go
 
