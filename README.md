@@ -1,4 +1,6 @@
 # retry
+[![GoDoc](http://godoc.org/badge.png)](http://godoc.org/github.com/lytics/retry)
+
 Retry Library for Go
 
 ```go
