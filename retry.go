@@ -97,7 +97,11 @@ func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(c
 		}
 	}
 	// ran out of retries
-	return fmt.Errorf("%w", latestErr)
+	if latestErr != nil {
+		return fmt.Errorf("%w", latestErr)
+	}
+	// could happen when x < 1
+	return nil
 }
 
 // backoff with exponential delay. On try 0, duration will be zero.
