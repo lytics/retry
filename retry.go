@@ -52,7 +52,7 @@ func X(x int, maxBackoff time.Duration, f func() bool) {
 // XWithContext runs function f until f returns nil or the
 // number of retries exceeds x. Never more than x calls of f
 // are done. Calls to f have a sleep duration between them.
-// XWithError will return a wrapped error around f's errors
+// XWithContext will return a wrapped error around f's errors
 // if all attempts fail.
 // The attempts can be cancelled with ctx. If f does not cancel
 // when ctx is done, then the currently-running f will be allowed
@@ -60,7 +60,7 @@ func X(x int, maxBackoff time.Duration, f func() bool) {
 //
 // Example 1:
 //    var err error
-//    retry.XWithError(3, 5*time.Second, func() error {
+//    retry.XWithContext(context.Background(), 3, 5*time.Second, func(ctx context.Context) error {
 //        err = DoSomething()
 //        return err
 //    })
