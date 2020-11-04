@@ -59,9 +59,8 @@ func X(x int, maxBackoff time.Duration, f func() bool) {
 // to complete first.
 //
 // Example 1:
-//    var err error
 //    retry.XWithContext(context.Background(), 3, 5*time.Second, func(ctx context.Context) error {
-//        err = DoSomething()
+//        err := DoSomething()
 //        return err
 //    })
 func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(ctx context.Context) error) error {
