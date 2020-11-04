@@ -66,13 +66,28 @@ func X(x int, maxBackoff time.Duration, f func() bool) {
 //    })
 func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(ctx context.Context) error) error {
 	var latestErr error
+	var timer *time.Timer
+
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+
 	for i := 0; i < x; i++ {
-		timer := time.NewTimer(backoff(i, maxBackoff))
-		defer timer.Stop()
+		if i == 0 {
+			timer = time.NewTimer(backoff(i, maxBackoff))
+		} else {
+			timer.Reset(backoff(i, maxBackoff))
+		}
 
 		select {
 		case <-ctx.Done():
 			// context cancelled
+			if !timer.Stop() {
+				// drain the timer chan
+				<-timer.C
+			}
 			return ctx.Err()
 		case <-timer.C:
 			if latestErr = f(ctx); latestErr == nil {
@@ -82,7 +97,7 @@ func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(c
 		}
 	}
 	// ran out of retries
-	return fmt.Errorf("all attempts failed, last attempt: %w", latestErr)
+	return fmt.Errorf("%w", latestErr)
 }
 
 // backoff with exponential delay. On try 0, duration will be zero.
