@@ -1,11 +1,11 @@
 // Package retry retries something X number of times, with an exponential backoff
 // between each attempt. The backoff is calculated to reach the maximum backoff
 // within three attempts.
-// 
+//
 // Example:
 //     // Retry six times with a maximum backoff of 5 seconds
 //     // between the retry attempts.
-//     
+//
 //     var err error
 //     retry.X(6, 5*time.Second, func() bool {
 //         err = DoSomething()
@@ -19,6 +19,8 @@
 package retry
 
 import (
+	"context"
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -45,6 +47,60 @@ func X(x int, maxBackoff time.Duration, f func() bool) {
 			return
 		}
 	}
+}
+
+// XWithContext runs function f until f returns nil or the
+// number of retries exceeds x. Never more than x calls of f
+// are done. Calls to f have a sleep duration between them.
+// XWithContext will return a wrapped error around f's errors
+// if all attempts fail.
+// The attempts can be cancelled with ctx. If f does not cancel
+// when ctx is done, then the currently-running f will be allowed
+// to complete first.
+//
+// Example 1:
+//    retry.XWithContext(context.Background(), 3, 5*time.Second, func(ctx context.Context) error {
+//        err := DoSomething()
+//        return err
+//    })
+func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(ctx context.Context) error) error {
+	var latestErr error
+	var timer *time.Timer
+
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+
+	for i := 0; i < x; i++ {
+		if i == 0 {
+			timer = time.NewTimer(backoff(i, maxBackoff))
+		} else {
+			timer.Reset(backoff(i, maxBackoff))
+		}
+
+		select {
+		case <-ctx.Done():
+			// context cancelled
+			if !timer.Stop() {
+				// drain the timer chan
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+			if latestErr = f(ctx); latestErr == nil {
+				// finished ok!
+				return nil
+			}
+		}
+	}
+	// ran out of retries
+	if latestErr != nil {
+		return fmt.Errorf("%w", latestErr)
+	}
+	// could happen when x < 1
+	return nil
 }
 
 // backoff with exponential delay. On try 0, duration will be zero.

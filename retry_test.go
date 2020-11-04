@@ -1,10 +1,14 @@
 package retry
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFailingRetry(t *testing.T) {
@@ -32,6 +36,57 @@ func TestSuccessfulRetry(t *testing.T) {
 	assert.Equal(t, 2, n)
 }
 
+func TestFailingRetryWithContext(t *testing.T) {
+	n := 0
+	ctx := context.Background()
+	// Always returning true to try again, should
+	// eventually reach the max retries.
+	var ErrOops = errors.New("oops")
+	err := XWithContext(ctx, 4, 1*time.Millisecond, func(ctx context.Context) error {
+		n++
+		return fmt.Errorf("failure %v, %w", n, ErrOops)
+	})
+	assert.Equal(t, 4, n)
+	// Make sure error is expected
+	assert.Equal(t, true, errors.Is(err, ErrOops))
+	assert.Equal(t, true, strings.Contains(err.Error(), fmt.Sprintf("failure %v", n)))
+}
+
+func TestSuccessfulRetryWithContext(t *testing.T) {
+	n := 0
+	ctx := context.Background()
+	// Returing false from the function should
+	// terminate the retries.
+	err := XWithContext(ctx, 4, 1*time.Millisecond, func(ctx context.Context) error {
+		n++
+		if n == 2 {
+			return nil
+		}
+		return errors.New("oops")
+	})
+	assert.Equal(t, 2, n)
+	assert.Nil(t, err)
+}
+
+func TestCancelledRetryWithContext(t *testing.T) {
+	n := 0
+	ctx, cancelFn := context.WithCancel(context.Background())
+	// Always returning true to try again, should
+	// eventually reach the max retries.
+	err := XWithContext(ctx, 4, 1*time.Millisecond, func(ctx context.Context) error {
+		n++
+		if n == 2 {
+			cancelFn()
+		} else if n > 2 {
+			time.Sleep(time.Minute)
+		}
+		return errors.New("oops")
+	})
+	assert.Equal(t, 2, n)
+	// Make sure error is expected
+	assert.Equal(t, true, errors.Is(err, context.Canceled))
+}
+
 func TestBackoff(t *testing.T) {
 	const max = 8 * time.Second
 
@@ -39,7 +94,7 @@ func TestBackoff(t *testing.T) {
 	// Large values of i should never return a
 	// duration larger than max.
 	for i := -10; i < 1000; i++ {
-		assert.T(t, max >= Backoff(i, max))
+		assert.True(t, max >= backoff(i, max))
 	}
 }
 
@@ -48,8 +103,8 @@ func TestTailBackoff(t *testing.T) {
 
 	// Test that beyond the third try,
 	// the max duration is returned.
-	third := Backoff(3, max)
+	third := backoff(3, max)
 	for i := 4; i < 1000; i++ {
-		assert.Equal(t, third, Backoff(i, max))
+		assert.Equal(t, third, backoff(i, max))
 	}
 }
