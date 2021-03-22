@@ -21,6 +21,7 @@ package retry
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -81,7 +82,7 @@ func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(c
 				// drain the timer chan
 				<-timer.C
 			}
-			return ctx.Err()
+			return fmt.Errorf("%w", ctx.Err())
 		case <-timer.C:
 			if latestErr = f(ctx); latestErr == nil {
 				// finished ok!
@@ -92,7 +93,7 @@ func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(c
 		timer.Reset(backoff(i+1, maxBackoff))
 	}
 	// ran out of retries
-	return latestErr
+	return fmt.Errorf("%w", latestErr)
 }
 
 // backoff with exponential delay. On try 0, duration will be zero.
