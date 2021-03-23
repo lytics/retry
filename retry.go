@@ -20,13 +20,14 @@ package retry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
 )
 
 // X number of retries. Function f should return false if it
-// wants to stop trying, but never more than x calls of f
+// wants to stop trying, but never more than x+1 calls of f
 // are done. Calls to f have a sleep duration between them.
 //
 // Example 1:
@@ -39,10 +40,8 @@ import (
 // The use of "return err != nil" is an ideomatic way of
 // returning true, keep trying, when the error is not nil.
 func X(x int, maxBackoff time.Duration, f func() bool) {
-	for i := 0; i < x; i++ {
-		if i > 0 {
-			time.Sleep(backoff(i, maxBackoff))
-		}
+	for i := 0; i <= x; i++ {
+		time.Sleep(backoff(i, maxBackoff))
 		if !f() {
 			return
 		}
@@ -50,7 +49,7 @@ func X(x int, maxBackoff time.Duration, f func() bool) {
 }
 
 // XWithContext runs function f until f returns nil or the
-// number of retries exceeds x. Never more than x calls of f
+// number of retries exceeds x. Never more than x+1 calls of f
 // are done. Calls to f have a sleep duration between them.
 // XWithContext will return a wrapped error around f's errors
 // if all attempts fail.
@@ -59,27 +58,23 @@ func X(x int, maxBackoff time.Duration, f func() bool) {
 // to complete first.
 //
 // Example 1:
-//    retry.XWithContext(context.Background(), 3, 5*time.Second, func(ctx context.Context) error {
-//        err := DoSomething()
+//    retry.XWithContext(ctx, 3, 5*time.Second, func(ctx context.Context) error {
+//        err := DoSomething(ctx)
 //        return err
 //    })
 func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(ctx context.Context) error) error {
+	if x < 0 {
+		return errors.New("x cannot be less than 0")
+	}
+	if maxBackoff < 0 {
+		return errors.New("maxBackoff cannot be less than 0")
+	}
+
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
 	var latestErr error
-	var timer *time.Timer
-
-	defer func() {
-		if timer != nil {
-			timer.Stop()
-		}
-	}()
-
-	for i := 0; i < x; i++ {
-		if i == 0 {
-			timer = time.NewTimer(backoff(i, maxBackoff))
-		} else {
-			timer.Reset(backoff(i, maxBackoff))
-		}
-
+	for i := 0; i <= x; i++ {
 		select {
 		case <-ctx.Done():
 			// context cancelled
@@ -87,20 +82,18 @@ func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(c
 				// drain the timer chan
 				<-timer.C
 			}
-			return ctx.Err()
+			return fmt.Errorf("%w", ctx.Err())
 		case <-timer.C:
 			if latestErr = f(ctx); latestErr == nil {
 				// finished ok!
 				return nil
 			}
 		}
+
+		timer.Reset(backoff(i+1, maxBackoff))
 	}
 	// ran out of retries
-	if latestErr != nil {
-		return fmt.Errorf("%w", latestErr)
-	}
-	// could happen when x < 1
-	return nil
+	return fmt.Errorf("%w", latestErr)
 }
 
 // backoff with exponential delay. On try 0, duration will be zero.
@@ -111,20 +104,23 @@ func XWithContext(ctx context.Context, x int, maxBackoff time.Duration, f func(c
 // Backoff is useful if you don't want to use the retry.X but want
 // to calculate exponential backoff with jitter for your own use.
 func backoff(try int, max time.Duration) time.Duration {
-	if try < 1 {
-		return time.Duration(0)
-	}
-	if try > 3 {
+	switch {
+	case try < 1:
+		return 0
+	case try > 3, max == 0:
 		return max
 	}
+
 	// 2^3 == 8. If you change this value then
 	// you need to update the documentation.
-	min := max / time.Duration(8)
+	min := max / 8
 	jit := int64(min) * int64(try)
-	dur := time.Duration(min) << uint64(try)
+	dur := min << uint64(try)
 	dur += time.Duration(rand.Int63n(jit))
-	if dur < time.Duration(0) || dur > max {
-		return max
+
+	if dur < 0 || dur > max {
+		dur = max
 	}
+
 	return dur
 }
